@@ -1,0 +1,5 @@
+dependencies {
+    implementation 'commons-beanutils:commons-beanutils:1.11.0'
+    // Import the dependency for jakarta.validation.constraints.*
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+}
