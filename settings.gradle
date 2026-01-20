@@ -4,4 +4,5 @@ rootProject.name = 'gradle-suites-project'
 // Modules to include in the build
 include 'microservice-1'
 include 'common'
+include 'oauth2-resource-api'
 

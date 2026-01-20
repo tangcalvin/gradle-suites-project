@@ -1,0 +1,41 @@
+server:
+  port: 8081
+
+spring:
+  security:
+    oauth2:
+      resourceserver:
+        opaque-token:
+          # Keycloak token introspection endpoint
+          introspection-uri: http://localhost:9090/realms/vite-test/protocol/openid-connect/token/introspect
+          # Confidential client used to introspect tokens (client credentials)
+          client-id: vite-test-api
+#          client-secret: refer to client-secret.txt (not used when using client assertion)
+
+app:
+  keycloak:
+    client-assertion:
+      # Audience (`aud`) for the client assertion JWT.
+      #
+      # Different Keycloak versions/configs may expect different values:
+      # - token endpoint:        http://localhost:9090/realms/<realm>/protocol/openid-connect/token
+      # - introspection endpoint: http://localhost:9090/realms/<realm>/protocol/openid-connect/token/introspect
+      #
+      # If you are getting 401 from introspection, TRY BOTH.
+      audience: ${spring.security.oauth2.resourceserver.opaque-token.introspection-uri}
+    # Private key used to sign the client assertion JWT
+    keystore:
+      location: classpath:keystore.jks
+      # You said: keystore password is the same as the client name/id
+      password: ${spring.security.oauth2.resourceserver.opaque-token.client-id}
+      # If your key alias differs, set it here (often the alias is also the client id)
+      key-alias: ${spring.security.oauth2.resourceserver.opaque-token.client-id}
+      # Many setups use the same password for the key entry; adjust if yours differs
+      key-password: ${spring.security.oauth2.resourceserver.opaque-token.client-id}
+      # Optional but often required: `kid` header value to help Keycloak pick the correct key from JWKS
+      # If you only have one key configured on the Keycloak client, this may be unnecessary.
+      #
+      # IMPORTANT: a WRONG `kid` commonly causes 401. If unsure, leave it blank and
+      # only set it after you confirm the `kid` shown in the client's JWKS in the
+      # Keycloak Admin Console (Clients → your client → Keys).
+      kid: ""

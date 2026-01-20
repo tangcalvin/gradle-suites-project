@@ -40,3 +40,5 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+/oauth2-resource-api/src/main/resources/client-secret.txt
+/oauth2-resource-api/src/main/resources/keystore.jks
