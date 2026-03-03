@@ -1,0 +1,5 @@
+spring:
+  jackson:
+    module:
+      bean-validator:
+        enabled: true
