@@ -1,0 +1,63 @@
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        use_sql_comments: true
+  datasource:
+    # H2 server must run first with -ifNotExists (./run-h2-server.sh)
+    url: jdbc:h2:tcp://localhost:9092/leaderdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema-h2.sql,classpath:schema-h2-alter.sql
+  integration:
+    jdbc:
+      initialize-schema: never
+
+# Leader election settings
+# - role: becomes LOCK_KEY in DB (via UUID.hash of role, deterministic)
+# - client-id: becomes CLIENT_ID in DB; set per instance for identification (e.g. hostname, pod name)
+# SFTP (leader-only; single connection, sequential download)
+sftp:
+  host: localhost
+  port: 22
+  username: ''
+  password: ''
+  # private-key: /path/to/key  # Optional; if set, password ignored
+  allow-unknown-keys: true
+  remote-directory: /
+  local-directory: ./sftp-staging
+  filename-pattern: '*.*'
+  nfs-base-path: ./nfs-output   # success -> nfs-output/success, failed -> nfs-output/failed
+  remote-processed-directory: processed   # move remote file here after successful processing (avoids re-poll)
+  remote-failed-directory: failed         # move remote file here when local processing fails (avoids re-poll)
+  poller-fixed-delay: 5000
+  processor-parallelism: 4
+
+# Metadata validation (polls DB for PENDING, validates fixed-length files)
+validation:
+  poller-fixed-delay: 60000   # 1 minute
+  max-per-poll: 5
+
+leader:
+  role: cluster-leader
+  # client-id: app-1  # Optional: CLIENT_ID in DB. Set per instance (max 36 chars). Default: auto-generated
+  busy-wait-ms: 200
+  heart-beat-ms: 1000
+
+# RabbitMQ (optional; for batch listener demo)
+rabbitmq:
+  queue: test.batch.queue
+  batch-size: 100
+  receive-timeout-ms: 3000
+  group-processor-parallelism: 4   # downstream workers for parallel group processing

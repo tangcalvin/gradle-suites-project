@@ -38,6 +38,9 @@ bin/
 ### VS Code ###
 .vscode/
 
+### Local SFTP test data ###
+/sftp-data/
+
 ### Mac OS ###
 .DS_Store
 /oauth2-resource-api/src/main/resources/client-secret.txt

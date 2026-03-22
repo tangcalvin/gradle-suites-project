@@ -1,5 +1,8 @@
 spring:
   jackson:
-    module:
-      bean-validator:
-        enabled: true
+    validation:
+      fail-fast: false  # Collect ALL violations
+    deserialization:
+      fail-on-unknown-properties: false
+server:
+  port: 8080

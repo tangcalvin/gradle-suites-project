@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <!-- Suppress harmless SFTP sync warning: when a file exists in staging (awaiting processor),
+         the sync skips re-download and logs. Files are processed correctly. -->
+    <logger name="org.springframework.integration.sftp.inbound.SftpInboundFileSynchronizer" level="INFO"/>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

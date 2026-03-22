@@ -1,0 +1,45 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.philomath'
+version = 'unspecified'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-integration'
+    implementation 'org.springframework.integration:spring-integration-jdbc'
+    implementation 'org.springframework.integration:spring-integration-jpa'
+    implementation 'org.springframework.integration:spring-integration-sftp'
+    implementation 'org.springframework.integration:spring-integration-file'
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    implementation 'org.springframework.integration:spring-integration-amqp'
+    implementation 'name.velikodniy.vitaliy:fixedlength:0.15'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    implementation 'org.springframework.boot:spring-boot-h2console'
+    runtimeOnly 'com.h2database:h2'
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// Run with: ./gradlew :spring-integration-sample:runH2Server
+task runH2Server(type: JavaExec) {
+    group = 'application'
+    description = 'Starts H2 TCP server for shared database (multi-instance leader election testing)'
+    classpath = configurations.runtimeClasspath
+    mainClass = 'org.h2.tools.Server'
+    args = ['-tcp', '-tcpPort', '9092', '-tcpAllowOthers', '-ifNotExists', '-baseDir', './h2-data']
+    standardInput = System.in
+}

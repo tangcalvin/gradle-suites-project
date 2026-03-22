@@ -1,7 +1,7 @@
 plugins {
     // The base plugin is optional but clarifies this is a multi-project build
     id 'base'
-    id 'org.springframework.boot' version '3.5.3' apply false
+    id 'org.springframework.boot' version '4.0.3' apply false
     id 'io.spring.dependency-management' version '1.1.0' apply false
 }
 
@@ -14,8 +14,8 @@ subprojects {
     group = 'com.philomath'
     version = '1.0-SNAPSHOT'
 
-    sourceCompatibility = '17'
-    targetCompatibility = '17'
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
 
     repositories {
         gradlePluginPortal()

@@ -1,0 +1,15 @@
+# RabbitMQ for local Docker Compose (docker compose up -d)
+spring:
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+
+# SFTP settings for local Docker Compose (docker compose up -d)
+sftp:
+  host: localhost
+  port: 2222
+  username: foo
+  password: pass
+  remote-directory: /upload

@@ -12,6 +12,7 @@
             <option value="$PROJECT_DIR$/common" />
             <option value="$PROJECT_DIR$/microservice-1" />
             <option value="$PROJECT_DIR$/oauth2-resource-api" />
+            <option value="$PROJECT_DIR$/spring-integration-sample" />
           </set>
         </option>
       </GradleProjectSettings>

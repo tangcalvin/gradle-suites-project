@@ -5,4 +5,5 @@ rootProject.name = 'gradle-suites-project'
 include 'microservice-1'
 include 'common'
 include 'oauth2-resource-api'
+include 'spring-integration-sample'
 
