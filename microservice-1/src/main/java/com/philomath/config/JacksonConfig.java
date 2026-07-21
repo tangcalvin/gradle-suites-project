@@ -7,6 +7,7 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.MapperFeature;
 import tools.jackson.databind.cfg.CoercionAction;
 import tools.jackson.databind.cfg.CoercionInputShape;
+import tools.jackson.databind.json.JsonMapper;
 import tools.jackson.databind.type.LogicalType;
 
 /**
@@ -25,53 +26,49 @@ public class JacksonConfig {
             builder.disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT);
             builder.enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES);
 
-            builder.withCoercionConfig(LogicalType.Textual, config -> {
-                config.setCoercion(CoercionInputShape.Integer, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Float, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Array, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Object, CoercionAction.Fail);
-            });
+            applyStrictCoercion(builder);
+        };
+    }
 
-            builder.withCoercionConfig(LogicalType.Integer, config -> {
-                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Float, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail);
+    /**
+     * Fail every cross-type coercion by iterating {@link LogicalType} and rejecting
+     * all {@link CoercionInputShape}s that are not native for that type.
+     */
+    private static void applyStrictCoercion(JsonMapper.Builder builder) {
+        for (LogicalType targetType : LogicalType.values()) {
+            if (targetType == LogicalType.Untyped) {
+                continue; // Object / JsonNode — accepts any JSON shape
+            }
+            builder.withCoercionConfig(targetType, config -> {
+                for (CoercionInputShape inputShape : CoercionInputShape.values()) {
+                    if (!isNativeInput(targetType, inputShape)) {
+                        config.setCoercion(inputShape, CoercionAction.Fail);
+                    }
+                }
             });
+        }
+    }
 
-            builder.withCoercionConfig(LogicalType.Float, config -> {
-                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail);
-            });
-
-            builder.withCoercionConfig(LogicalType.Boolean, config -> {
-                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Integer, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Float, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.EmptyString, CoercionAction.Fail);
-            });
-
-            builder.withCoercionConfig(LogicalType.Array, config -> {
-                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Integer, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Float, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
-            });
-
-            builder.withCoercionConfig(LogicalType.POJO, config -> {
-                config.setCoercion(CoercionInputShape.String, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Integer, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Float, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
-            });
-
-            builder.withCoercionConfig(LogicalType.DateTime, config -> {
-                config.setCoercion(CoercionInputShape.Integer, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Float, CoercionAction.Fail);
-                config.setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
-            });
+    /**
+     * JSON token shapes that are valid input for each logical Java type.
+     * Everything else is rejected (e.g. number into String, string into int).
+     */
+    private static boolean isNativeInput(LogicalType targetType, CoercionInputShape inputShape) {
+        return switch (targetType) {
+            case Textual -> inputShape == CoercionInputShape.String;
+            case Integer -> inputShape == CoercionInputShape.Integer;
+            // JSON integer tokens are valid for floating-point fields (1 → 1.0)
+            case Float -> inputShape == CoercionInputShape.Integer
+                    || inputShape == CoercionInputShape.Float;
+            case Boolean -> inputShape == CoercionInputShape.Boolean;
+            case Enum -> inputShape == CoercionInputShape.String;
+            case Array, Collection -> inputShape == CoercionInputShape.Array;
+            case Map, POJO -> inputShape == CoercionInputShape.Object;
+            case DateTime -> inputShape == CoercionInputShape.String;
+            case Binary -> inputShape == CoercionInputShape.String
+                    || inputShape == CoercionInputShape.Binary;
+            case OtherScalar -> inputShape == CoercionInputShape.String;
+            case Untyped -> true;
         };
     }
 }
