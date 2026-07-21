@@ -13,12 +13,17 @@ import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.DatabindException;
+import tools.jackson.databind.exc.MismatchedInputException;
 
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 // Global exception handler
@@ -157,43 +162,121 @@ public class GlobalExceptionHandler {
         return errors;
     }
 
+    private static final Pattern REFERENCE_CHAIN_FIELD = Pattern.compile("\\[\"([^\"]+)\"\\]\\s*$");
+
     /**
-     * Handle HttpMessageNotReadableException - JSON parsing errors (e.g., invalid date/time formats)
-     * This catches errors like "25:00:00" for LocalTime before they reach the validator
+     * Handle HttpMessageNotReadableException - JSON parsing / coercion errors before validation.
+     * Root cause is usually Jackson {@link MismatchedInputException} (strict type mismatch).
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public JsonParsingErrorResponse handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
-        // Extract the most specific cause (usually the Jackson parsing exception)
         Throwable cause = ex.getMostSpecificCause();
-        String fieldName = "unknown";
         String errorMessage = cause != null ? cause.getMessage() : ex.getMessage();
 
-        // Try to extract field name from error message
-        // Example: "Cannot deserialize value of type `java.time.LocalTime` from String \"25:00:00\""
-        if (errorMessage != null) {
-            int idx = errorMessage.indexOf("from String");
-            if (idx > 0) {
-                int typeStartIdx = errorMessage.indexOf("`java.time.");
-                if (typeStartIdx > 0) {
-                    int typeEndIdx = errorMessage.indexOf("`", typeStartIdx + 1);
-                    if (typeEndIdx > 0) {
-                        String fullType = errorMessage.substring(typeStartIdx + 1, typeEndIdx);
-                        fieldName = fullType.substring(fullType.lastIndexOf('.') + 1);
-                    }
-                }
-            }
-        }
+        JsonParseDetails details = extractJsonParseDetails(cause != null ? cause : ex)
+                .orElseGet(() -> fallbackJsonParseDetails(errorMessage));
 
         JsonParsingErrorResponse errorResponse = new JsonParsingErrorResponse();
         errorResponse.setTimestamp(LocalDateTime.now());
         errorResponse.setStatus(HttpStatus.BAD_REQUEST.value());
         errorResponse.setError("Invalid JSON Format");
         errorResponse.setMessage(errorMessage);
-        errorResponse.setFieldType(fieldName);
+        errorResponse.setField(details.field());
+        errorResponse.setTargetType(details.targetType());
+        errorResponse.setFieldType(details.targetType()); // backward-compatible alias
 
         return errorResponse;
     }
+
+    /**
+     * Extract JSON field path and target type from Jackson databind exceptions.
+     */
+    private static Optional<JsonParseDetails> extractJsonParseDetails(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof MismatchedInputException mie) {
+                return Optional.of(new JsonParseDetails(
+                        buildFieldPath(mie),
+                        targetTypeName(mie.getTargetType())));
+            }
+            if (current instanceof DatabindException de) {
+                String field = buildFieldPath(de);
+                if (field != null) {
+                    return Optional.of(new JsonParseDetails(field, null));
+                }
+            }
+            current = current.getCause();
+        }
+        return Optional.empty();
+    }
+
+    private static String buildFieldPath(JacksonException exception) {
+        List<JacksonException.Reference> path = exception.getPath();
+        if (path == null || path.isEmpty()) {
+            return parseFieldFromPathReference(exception.getPathReference());
+        }
+        return path.stream()
+                .map(ref -> {
+                    if (ref.getPropertyName() != null) {
+                        return ref.getPropertyName();
+                    }
+                    if (ref.getIndex() >= 0) {
+                        return "[" + ref.getIndex() + "]";
+                    }
+                    return null;
+                })
+                .filter(part -> part != null && !part.isEmpty())
+                .collect(Collectors.joining("."));
+    }
+
+    /** Parse {@code TenFieldDTO["title"]} or nested {@code Foo["bar"]["qux"]} into dot path. */
+    private static String parseFieldFromPathReference(String pathReference) {
+        if (pathReference == null || pathReference.isBlank()) {
+            return null;
+        }
+        Matcher matcher = Pattern.compile("\\[\"([^\"]+)\"\\]").matcher(pathReference);
+        StringBuilder field = new StringBuilder();
+        while (matcher.find()) {
+            if (field.length() > 0) {
+                field.append('.');
+            }
+            field.append(matcher.group(1));
+        }
+        return field.length() > 0 ? field.toString() : null;
+    }
+
+    private static String targetTypeName(Class<?> targetType) {
+        return targetType != null ? targetType.getSimpleName() : null;
+    }
+
+    /** Fallback when Jackson path is unavailable — parse message or reference chain. */
+    private static JsonParseDetails fallbackJsonParseDetails(String errorMessage) {
+        if (errorMessage == null) {
+            return new JsonParseDetails(null, null);
+        }
+        // e.g. ... TenFieldDTO["title"] or Foo["bar"]->java.util.ArrayList[0]
+        Matcher chainMatcher = REFERENCE_CHAIN_FIELD.matcher(errorMessage);
+        String field = null;
+        if (chainMatcher.find()) {
+            field = chainMatcher.group(1);
+        }
+        // legacy: java.time type from "from String" messages
+        String targetType = null;
+        if (errorMessage.contains("from String")) {
+            int typeStartIdx = errorMessage.indexOf("`java.time.");
+            if (typeStartIdx > 0) {
+                int typeEndIdx = errorMessage.indexOf('`', typeStartIdx + 1);
+                if (typeEndIdx > 0) {
+                    String fullType = errorMessage.substring(typeStartIdx + 1, typeEndIdx);
+                    targetType = fullType.substring(fullType.lastIndexOf('.') + 1);
+                }
+            }
+        }
+        return new JsonParseDetails(field, targetType);
+    }
+
+    private record JsonParseDetails(String field, String targetType) {}
 
     /**
      * Fallback handler for other exceptions
@@ -276,6 +359,12 @@ public class GlobalExceptionHandler {
         private int status;
         private String error;
         private String message;
+        /** JSON field path, e.g. {@code title}, {@code address.city}, {@code tags.[1]} */
+        private String field;
+        /** Expected Java type, e.g. {@code String}, {@code Integer} */
+        private String targetType;
+        /** @deprecated use {@link #targetType}; kept for backward compatibility */
+        @Deprecated
         private String fieldType;
 
         // Getters and Setters
@@ -309,6 +398,22 @@ public class GlobalExceptionHandler {
 
         public void setMessage(String message) {
             this.message = message;
+        }
+
+        public String getField() {
+            return field;
+        }
+
+        public void setField(String field) {
+            this.field = field;
+        }
+
+        public String getTargetType() {
+            return targetType;
+        }
+
+        public void setTargetType(String targetType) {
+            this.targetType = targetType;
         }
 
         public String getFieldType() {
